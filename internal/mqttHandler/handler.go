@@ -1,6 +1,7 @@
 package mqtthandler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -11,16 +12,27 @@ import (
 )
 
 type MqttContext struct {
-	Client mqtt.Client
+	client   mqtt.Client
+	espTopic string
+	BleChan  chan string
 }
 
 func (m *MqttContext) Close() {
-	m.Client.Disconnect(100)
+	m.client.Disconnect(100)
+}
+
+func (m *MqttContext) messageHandler(_ mqtt.Client, msg mqtt.Message) {
+	var j Message
+	if err := json.Unmarshal(msg.Payload(), &j); err != nil {
+		log.Println("could not unmarshal msg")
+	}
+	m.BleChan <- fmt.Sprintf("Received message: %s from topic: %s\n", j, msg.Topic())
 }
 
 func NewMqttContext() (*MqttContext, error) {
 
 	var port int
+	var m *MqttContext = &MqttContext{}
 
 	broker := os.Getenv("MQTT_HOST")
 	username := os.Getenv("MQTT_USERNAME")
@@ -37,21 +49,24 @@ func NewMqttContext() (*MqttContext, error) {
 	opts.SetClientID(clientId)
 	opts.SetUsername(username)
 	opts.SetPassword(password)
-	opts.SetDefaultPublishHandler(messagePubHandler)
+	opts.SetDefaultPublishHandler(m.messageHandler)
 	opts.OnConnect = connectHandler
 	opts.OnConnectionLost = connectLostHandler
 	client := mqtt.NewClient(opts)
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
 		log.Panic(token.Error())
 	}
-
-	return &MqttContext{
-		Client: client,
-	}, nil
+	m.client = client
+	m.espTopic = os.Getenv("MQTT_ESP_TOPIC")
+	m.BleChan = make(chan string, 10)
+	return m, nil
 }
 
-var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
-	log.Printf("Received message: %s from topic: %s\n", msg.Payload(), msg.Topic())
+func (m *MqttContext) Subscribe() error {
+	if token := m.client.Subscribe(m.espTopic, byte(0), nil); token.Wait() && token.Error() != nil {
+		return token.Error()
+	}
+	return nil
 }
 
 var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {

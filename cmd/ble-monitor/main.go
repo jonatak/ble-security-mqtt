@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/joho/godotenv"
@@ -19,5 +20,13 @@ func main() {
 	defer mqttCon.Close()
 	if mqttCon != nil {
 		log.Println("success")
+	}
+
+	if err := mqttCon.Subscribe(); err != nil {
+		log.Fatal(err)
+	}
+
+	for c := range mqttCon.BleChan {
+		fmt.Println(c)
 	}
 }
