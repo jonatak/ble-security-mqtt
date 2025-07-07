@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	err := godotenv.Load("/Users/billaudjonathan/Projects/perso/ble-security-mqtt/ble-security-mqtt/.env")
+	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
